@@ -985,3 +985,17 @@ void lpms_transcode_discontinuity(struct transcode_thread *handle) {
     handle->ictx.discontinuity[i] = 1;
   }
 }
+
+void lpms_print_av_codecs()
+{
+  void *iter = NULL;
+  const AVCodec *codec = NULL;
+
+  while (codec = av_codec_iterate(&iter)) {
+      if (av_codec_is_encoder(codec)) {
+          av_log(NULL, AV_LOG_WARNING, "Encoder %s | %s\n", codec->name, codec->long_name);
+      } else {
+          av_log(NULL, AV_LOG_WARNING, "Decoder %s | %s\n", codec->name, codec->long_name);
+      }
+  }
+}

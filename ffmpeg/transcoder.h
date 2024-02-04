@@ -83,5 +83,6 @@ int lpms_transcode_reopen_demux(input_params *inp);
 struct transcode_thread* lpms_transcode_new();
 void lpms_transcode_stop(struct transcode_thread* handle);
 void lpms_transcode_discontinuity(struct transcode_thread *handle);
+void lpms_print_av_codecs();
 
 #endif // _LPMS_TRANSCODER_H_

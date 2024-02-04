@@ -19,6 +19,7 @@ func validRenditions() []string {
 }
 
 func main() {
+	debug := flag.Bool("debug", true, "Print debug information (eg encoders/decoders available)")
 	from := flag.Duration("from", 0, "Skip all frames before that timestamp, from start of the file")
 	hevc := flag.Bool("hevc", false, "Use H.265/HEVC for encoding")
 	to := flag.Duration("to", 0, "Skip all frames after that timestamp, from start of the file")
@@ -82,7 +83,11 @@ func main() {
 		dev = args[4]
 	}
 
-	ffmpeg.InitFFmpeg()
+	if *debug == false {
+		ffmpeg.InitFFmpeg()
+	} else {
+		ffmpeg.InitFFmpegWithDebug()
+	}
 
 	t := time.Now()
 	fmt.Printf("Setting fname %s encoding %d renditions with %v from %s to %s\n", fname, len(options), lbl, *from, *to)

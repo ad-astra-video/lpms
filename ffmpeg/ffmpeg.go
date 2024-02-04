@@ -1050,6 +1050,13 @@ func InitFFmpeg() {
 	InitFFmpegWithLogLevel(FFLogWarning)
 }
 
+func InitFFmpegWithDebug() {
+	InitFFmpegWithLogLevel(FFLogWarning)
+
+	C.lpms_print_av_codecs()
+
+}
+
 func createBackendConfig(deviceid string) string {
 	configProto := &pb.ConfigProto{GpuOptions: &pb.GPUOptions{AllowGrowth: true}}
 	bytes, err := proto.Marshal(configProto)
