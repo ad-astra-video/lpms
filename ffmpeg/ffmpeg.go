@@ -68,14 +68,17 @@ var FfEncoderLookup = map[Acceleration]map[VideoCodec]string{
 		H265: "libx265",
 		VP8:  "libvpx",
 		VP9:  "libvpx-vp9",
+		AV1:  "libsvtav1",
 	},
 	Nvidia: {
 		H264: "h264_nvenc",
 		H265: "hevc_nvenc",
+		AV1:  "av1_nvenc",
 	},
 	Netint: {
 		H264: "h264_ni_enc",
 		H265: "h265_ni_enc",
+		AV1:  "av1_ni_enc",
 	},
 }
 

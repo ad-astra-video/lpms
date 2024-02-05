@@ -22,12 +22,13 @@ func main() {
 	debug := flag.Bool("debug", true, "Print debug information (eg encoders/decoders available)")
 	from := flag.Duration("from", 0, "Skip all frames before that timestamp, from start of the file")
 	hevc := flag.Bool("hevc", false, "Use H.265/HEVC for encoding")
+	av1 := flag.Bool("av1", false, "Use AV1 for encoding")
 	to := flag.Duration("to", 0, "Skip all frames after that timestamp, from start of the file")
 	flag.Parse()
 	var err error
 	args := append([]string{os.Args[0]}, flag.Args()...)
 	if len(args) <= 3 {
-		panic("Usage: [-hevc] [-from dur] [-to dur] <input file> <output renditions, comma separated> <sw/nv/nt>")
+		panic("Usage: [-hevc|-av1] [-from dur] [-to dur] <input file> <output renditions, comma separated> <sw/nv/nt>")
 	}
 	str2accel := func(inp string) (ffmpeg.Acceleration, string) {
 		if inp == "nv" {
@@ -48,6 +49,8 @@ func main() {
 			}
 			if *hevc {
 				p.Encoder = ffmpeg.H265
+			} else if *av1 {
+				p.Encoder = ffmpeg.AV1
 			} else {
 				p.Profile = ffmpeg.ProfileH264High
 			}

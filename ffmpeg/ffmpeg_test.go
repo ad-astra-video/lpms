@@ -619,8 +619,8 @@ func TestSW_Transcoding(t *testing.T) {
 func supportedCodecsCombinations(accels []Acceleration) []TranscodeOptionsTest {
 	prof := P240p30fps16x9
 	var opts []TranscodeOptionsTest
-	inCodecs := []VideoCodec{H264, H265, VP8, VP9}
-	outCodecs := []VideoCodec{H264, H265, VP8, VP9}
+	inCodecs := []VideoCodec{H264, H265, VP8, VP9, AV1}
+	outCodecs := []VideoCodec{H264, H265, VP8, VP9, AV1}
 	for _, inAccel := range accels {
 		for _, outAccel := range accels {
 			for _, inCodec := range inCodecs {
@@ -629,7 +629,7 @@ func supportedCodecsCombinations(accels []Acceleration) []TranscodeOptionsTest {
 					switch outAccel {
 					case Nvidia:
 						switch outCodec {
-						case VP8, VP9:
+						case VP8, VP9, AV1:
 							continue
 						}
 					}
@@ -661,13 +661,13 @@ func codecsComboTest(t *testing.T, options []TranscodeOptionsTest) {
 	for i := range options {
 		curOptions := options[i]
 		switch curOptions.InputCodec {
-		case VP8, VP9:
+		case VP8, VP9, AV1:
 			inName = dir + "/test_in.mkv"
 		case H264, H265:
 			inName = dir + "/test_in.ts"
 		}
 		switch curOptions.OutputCodec {
-		case VP8, VP9:
+		case VP8, VP9, AV1:
 			outName = dir + "/out.mkv"
 			qName = dir + "/sw.mkv"
 		case H264, H265:

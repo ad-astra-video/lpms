@@ -248,6 +248,8 @@ char* get_hw_decoder(int ff_codec_id, int hw_type)
                     return "vp8_cuvid";
                 case AV_CODEC_ID_VP9:
                     return "vp9_cuvid";
+                case AV_CODEC_ID_AV1:
+                    return "av1_cuvid";
                 default:
                     return "";
             }
@@ -257,6 +259,8 @@ char* get_hw_decoder(int ff_codec_id, int hw_type)
                     return "h264_ni_dec";
                 case AV_CODEC_ID_HEVC:
                     return "h265_ni_dec";
+                case AV_CODEC_ID_AV1:
+                    return "av1_ni_dec";
                 case AV_CODEC_ID_VP8:
                     return "";
                 case AV_CODEC_ID_VP9:
