@@ -53,6 +53,7 @@ const (
 	Nvidia
 	Amd
 	Netint
+	Intel
 )
 
 var AccelerationNameLookup = map[Acceleration]string{
@@ -60,6 +61,7 @@ var AccelerationNameLookup = map[Acceleration]string{
 	Nvidia:   "Nvidia",
 	Amd:      "Amd",
 	Netint:   "Netint",
+	Intel:    "Intel",
 }
 
 var FfEncoderLookup = map[Acceleration]map[VideoCodec]string{
@@ -80,6 +82,11 @@ var FfEncoderLookup = map[Acceleration]map[VideoCodec]string{
 		H265: "h265_ni_enc",
 		AV1:  "av1_ni_enc",
 	},
+	Intel: {
+		H264: "h264_qsv",
+		H265: "hevc_qsv",
+		AV1:  "av1_qsv",
+	}
 }
 
 type ComponentOptions struct {
@@ -483,6 +490,13 @@ func configEncoder(inOpts *TranscodeOptionsIn, outOpts TranscodeOptions) (string
 			// Use software scale filter
 			return encoder, "scale", "", nil
 		}
+	case Intel:
+		switch outOpts.Accel {
+		case Software, Nvidia, Netint:
+			return "", "", "", ErrTranscoderDev // XXX don't allow mix-match between Intel and sw/nv/netint
+		case Intel:
+			return encoder, "scale_qsv", "", nil
+		}
 	}
 	return "", "", "", ErrTranscoderHw
 }
@@ -494,6 +508,8 @@ func accelDeviceType(accel Acceleration) (C.enum_AVHWDeviceType, error) {
 		return C.AV_HWDEVICE_TYPE_CUDA, nil
 	case Netint:
 		return C.AV_HWDEVICE_TYPE_MEDIACODEC, nil
+	case Intel:
+		reutrn C.AV_HWDEVICE_TYPE_QSV, nil
 	}
 	return C.AV_HWDEVICE_TYPE_NONE, ErrTranscoderHw
 }

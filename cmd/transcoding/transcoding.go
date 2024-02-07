@@ -28,7 +28,7 @@ func main() {
 	var err error
 	args := append([]string{os.Args[0]}, flag.Args()...)
 	if len(args) <= 3 {
-		panic("Usage: [-hevc|-av1] [-from dur] [-to dur] <input file> <output renditions, comma separated> <sw/nv/nt>")
+		panic("Usage: [-hevc|-av1] [-from dur] [-to dur] <input file> <output renditions, comma separated> <sw/nv/nt/intel>")
 	}
 	str2accel := func(inp string) (ffmpeg.Acceleration, string) {
 		if inp == "nv" {
@@ -36,6 +36,9 @@ func main() {
 		}
 		if inp == "nt" {
 			return ffmpeg.Netint, "nt"
+		}
+		if inp == "intel" {
+			return ffmpeg.Intel, "intel"
 		}
 		return ffmpeg.Software, "sw"
 	}
