@@ -676,6 +676,7 @@ func createCOutputParams(input *TranscodeOptionsIn, ps []TranscodeOptions) ([]C.
 		// NETINT encoder, and make sure we change relevant things here
 		// Any other options for the encoder can also be added here
 		xcoderOutParamsStr := ""
+		glog.Infof("video encoder name: %v", p.VideoEncoder.Name)
 		if len(p.VideoEncoder.Name) <= 0 && len(p.VideoEncoder.Opts) <= 0 {
 			p.VideoEncoder.Opts = map[string]string{
 				"forced-idr": "1",
