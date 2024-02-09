@@ -643,6 +643,7 @@ func createCOutputParams(input *TranscodeOptionsIn, ps []TranscodeOptions) ([]C.
 				return params, finalizer, err
 			}
 		}
+		fmt.Printf("encoder: %v output_accel: %v\n", encoder, p.Accel) //DEBUG LOG
 		// preserve aspect ratio along the larger dimension when rescaling
 		filters := fmt.Sprintf("%s='w=if(gte(iw,ih),%d,-2):h=if(lt(iw,ih),%d,-2)'", scale_filter, w, h)
 		if interpAlgo != "" {
@@ -680,8 +681,8 @@ func createCOutputParams(input *TranscodeOptionsIn, ps []TranscodeOptions) ([]C.
 			p.VideoEncoder.Opts = map[string]string{
 				"forced-idr": "1",
 				"preset":     "slow",
-				"tier":       "high",
 			}
+
 			if p.Profile.Quality != 0 {
 				if p.Profile.Quality <= 63 {
 					p.VideoEncoder.Opts["crf"] = strconv.Itoa(int(p.Profile.Quality))
@@ -698,29 +699,46 @@ func createCOutputParams(input *TranscodeOptionsIn, ps []TranscodeOptions) ([]C.
 					glog.Warning("Cannot use CQ param, value out of range (0-51)")
 				}
 			}
-			switch p.Profile.Profile {
-			case ProfileH264Baseline, ProfileH264ConstrainedHigh:
-				if p.Accel != Netint {
-					p.VideoEncoder.Opts["profile"] = ProfileParameters[p.Profile.Profile]
-					p.VideoEncoder.Opts["bf"] = "0"
-				} else {
-					xcoderOutParamsStr = "profile=high:gopPresetIdx=2"
+
+			//set options based on encoder
+			if p.Profile.Encoder == AV1 {
+				//no "profile" in nvenc_av1.c options
+				//tiers: 0 | 1
+				p.VideoEncoder.Opts["tier"] = "0"
+				p.VideoEncoder.Opts["bf"] = "3" //confirm this setting
+			} else if p.Profile.Encoder == H265 {
+				//profiles: main | main10
+				//tiers: main | high
+				p.VideoEncoder.Opts["profile"] = "main"
+				p.VideoEncoder.Opts["bf"] = "3" //confirm this setting
+			} else if p.Profile.Encoder == H264 {
+
+				p.VideoEncoder.Opts["tier"] = "high"
+
+				switch p.Profile.Profile {
+				case ProfileH264Baseline, ProfileH264ConstrainedHigh:
+					if p.Accel != Netint {
+						p.VideoEncoder.Opts["profile"] = ProfileParameters[p.Profile.Profile]
+						p.VideoEncoder.Opts["bf"] = "0"
+					} else {
+						xcoderOutParamsStr = "profile=high:gopPresetIdx=2"
+					}
+				case ProfileH264Main, ProfileH264High:
+					if p.Accel != Netint {
+						p.VideoEncoder.Opts["profile"] = ProfileParameters[p.Profile.Profile]
+						p.VideoEncoder.Opts["bf"] = "3"
+					} else {
+						xcoderOutParamsStr = "profile=high"
+					}
+				case ProfileNone:
+					if p.Accel == Nvidia {
+						p.VideoEncoder.Opts["bf"] = "0"
+					} else {
+						p.VideoEncoder.Opts["bf"] = "3"
+					}
+				default:
+					return params, finalizer, ErrTranscoderPrf
 				}
-			case ProfileH264Main, ProfileH264High:
-				if p.Accel != Netint {
-					p.VideoEncoder.Opts["profile"] = ProfileParameters[p.Profile.Profile]
-					p.VideoEncoder.Opts["bf"] = "3"
-				} else {
-					xcoderOutParamsStr = "profile=high"
-				}
-			case ProfileNone:
-				if p.Accel == Nvidia {
-					p.VideoEncoder.Opts["bf"] = "0"
-				} else {
-					p.VideoEncoder.Opts["bf"] = "3"
-				}
-			default:
-				return params, finalizer, ErrTranscoderPrf
 			}
 			if p.Profile.Framerate == 0 && p.Accel == Nvidia {
 				// When the decoded video contains non-monotonic increases in PTS (common with OBS)
@@ -908,6 +926,7 @@ func (t *Transcoder) Transcode(input *TranscodeOptionsIn, ps []TranscodeOptions)
 		}
 	}
 	hw_type, err := accelDeviceType(input.Accel)
+	fmt.Printf("input accel: %v  hw_type: %v\n", input.Accel, hw_type) //DEBUG LOG
 	if err != nil {
 		return nil, err
 	}
