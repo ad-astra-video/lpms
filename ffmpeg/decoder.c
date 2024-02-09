@@ -209,7 +209,7 @@ pixfmt_cleanup:
 int open_audio_decoder(input_params *params, struct input_ctx *ctx)
 {
   int ret = 0;
-  AVCodec *codec = NULL;
+  const AVCodec *codec = NULL;
   AVFormatContext *ic = ctx->ic;
 
   // open audio decoder
@@ -274,7 +274,7 @@ char* get_hw_decoder(int ff_codec_id, int hw_type)
 int open_video_decoder(input_params *params, struct input_ctx *ctx)
 {
   int ret = 0;
-  AVCodec *codec = NULL;
+  const AVCodec *codec = NULL;
   AVDictionary **opts = NULL;
   AVFormatContext *ic = ctx->ic;
   // open video decoder
@@ -289,7 +289,7 @@ int open_video_decoder(input_params *params, struct input_ctx *ctx)
         ret = lpms_ERR_INPUT_CODEC;
         LPMS_ERR(open_decoder_err, "Input codec does not support hardware acceleration");
       }
-      AVCodec *c = avcodec_find_decoder_by_name(decoder_name);
+      const AVCodec *c = avcodec_find_decoder_by_name(decoder_name);
       if (c) codec = c;
       else LPMS_WARN("Nvidia decoder not found; defaulting to software");
       if (AV_PIX_FMT_YUV420P != ic->streams[ctx->vi]->codecpar->format &&
@@ -300,7 +300,8 @@ int open_video_decoder(input_params *params, struct input_ctx *ctx)
       }
     } else if (params->video.name && strlen(params->video.name) != 0) {
       // Try to find user specified decoder by name
-      AVCodec *c = avcodec_find_decoder_by_name(params->video.name);
+      const AVCodec *c = avcodec_find_decoder_by_name(params->video.name);
+      av_log(NULL, AV_LOG_WARNING, "selecting decoder for, %s\n", params->video.name);
       if (c) codec = c;
       if (params->video.opts) opts = &params->video.opts;
     }
@@ -340,7 +341,7 @@ int open_input(input_params *params, struct input_ctx *ctx)
   int ret = 0;
 
   ctx->transmuxing = params->transmuxe;
-
+  av_log(NULL, AV_LOG_WARNING, "opening input, hw_type=%d\n", params->hw_type);
   // open demuxer
   ret = avformat_open_input(&ic, inp, NULL, NULL);
   if (ret < 0) LPMS_ERR(open_input_err, "demuxer: Unable to open input");
