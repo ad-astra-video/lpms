@@ -680,8 +680,11 @@ func createCOutputParams(input *TranscodeOptionsIn, ps []TranscodeOptions) ([]C.
 			p.VideoEncoder.Opts = map[string]string{
 				"forced-idr": "1",
 				"preset":     "slow",
-				"tier":       "high",
 			}
+			if p.VideoEncoder.Name != "av1_nvenc" && p.Accel == Nvidia {
+				p.VideoEncoder.Opts["tier"] = "high"
+			}
+
 			if p.Profile.Quality != 0 {
 				if p.Profile.Quality <= 63 {
 					p.VideoEncoder.Opts["crf"] = strconv.Itoa(int(p.Profile.Quality))
