@@ -237,7 +237,7 @@ static uint8_t * get_filebuffer(const char *filename, int* fileLength)
     if (strlen(filename) <= 0) return buffer;
     f = fopen(filename, "rb");
     if (f == NULL) {
-        av_log(NULL, AV_LOG_ERROR, "Could not open the file %s\n", filename);
+        //av_log(NULL, AV_LOG_ERROR, "Could not open the file %s\n", filename);
         return buffer;
     }
     *fileLength = get_filesize(filename);

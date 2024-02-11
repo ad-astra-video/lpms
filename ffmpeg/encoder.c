@@ -159,7 +159,7 @@ void close_output(struct output_ctx *octx)
   }
   if (octx->vc && octx->hw_type == AV_HWDEVICE_TYPE_NONE) {
       avcodec_free_context(&octx->vc);
-      av_log(NULL, AV_LOG_WARNING, "released output codec context\n");
+      //av_log(NULL, AV_LOG_WARNING, "released output codec context\n"); //DEBUG LOG
       
   }
   if (octx->ac) avcodec_free_context(&octx->ac);
@@ -215,7 +215,7 @@ open_output_err:
 
 int open_output(struct output_ctx *octx, struct input_ctx *ictx)
 {
-  av_log(NULL, AV_LOG_WARNING, "opening output, hw_type=%d\n", octx->hw_type); //DEBUG log
+  //av_log(NULL, AV_LOG_WARNING, "opening output, hw_type=%d\n", octx->hw_type); //DEBUG LOG
   int ret = 0, inp_has_stream;
   const AVOutputFormat *fmt = NULL;
   AVFormatContext *oc = NULL;
@@ -296,7 +296,7 @@ int open_output(struct output_ctx *octx, struct input_ctx *ictx)
     if (ret < 0) LPMS_ERR(open_output_err, "Unable to open signature filter");
   }
 
-  av_log(NULL, AV_LOG_WARNING, "output opened\n"); //DEBUG log
+  //av_log(NULL, AV_LOG_WARNING, "output opened\n"); //DEBUG LOG
   return 0;
 
 open_output_err:
@@ -367,7 +367,7 @@ static int encode(AVCodecContext* encoder, AVFrame *frame, struct output_ctx* oc
       AV_HWDEVICE_TYPE_CUDA == octx->hw_type && !frame) {
     avcodec_flush_buffers(encoder);
   }
-  av_log(NULL, AV_LOG_WARNING, "frame encoded\n"); //DEBUG LOG
+  //av_log(NULL, AV_LOG_WARNING, "frame encoded\n"); //DEBUG LOG
 
   pkt = av_packet_alloc();
   if (!pkt) {
@@ -378,27 +378,27 @@ static int encode(AVCodecContext* encoder, AVFrame *frame, struct output_ctx* oc
     av_packet_unref(pkt);
     ret = avcodec_receive_packet(encoder, pkt);
     if (AVERROR(EAGAIN) == ret || AVERROR_EOF == ret) {
-      av_log(NULL, AV_LOG_WARNING, "receive packet error-ok: %d\n", ret); //DEBUG LOG  
+      //av_log(NULL, AV_LOG_WARNING, "receive packet error-ok: %d\n", ret); //DEBUG LOG  
       goto encode_cleanup; //this is ok, just need more packets for encoder?
     }
-    av_log(NULL, AV_LOG_WARNING, "receive packet error: %d\n", ret); //DEBUG LOG
+   // av_log(NULL, AV_LOG_WARNING, "receive packet error: %d\n", ret); //DEBUG LOG
     if (ret < 0) LPMS_ERR(encode_cleanup, "Error receiving packet from encoder");
     ret = mux(pkt, encoder->time_base, octx, ost);
     if (ret < 0) {
-      av_log(NULL, AV_LOG_WARNING, "mux error: %d\n", ret); //DEBUG LOG
+      //av_log(NULL, AV_LOG_WARNING, "mux error: %d\n", ret); //DEBUG LOG
       goto encode_cleanup;
     }
   }
 
 encode_cleanup:
   if (pkt) av_packet_free(&pkt);
-  av_log(NULL, AV_LOG_WARNING, "encode complete\n"); //DEBUG LOG  
+  //av_log(NULL, AV_LOG_WARNING, "encode complete\n"); //DEBUG LOG  
   return ret;
 }
 
 int mux(AVPacket *pkt, AVRational tb, struct output_ctx *octx, AVStream *ost)
 {
-  av_log(NULL, AV_LOG_WARNING, "starting mux\n"); //DEBUG LOG
+  //av_log(NULL, AV_LOG_WARNING, "starting mux\n"); //DEBUG LOG
   pkt->stream_index = ost->index;
   if (av_cmp_q(tb, ost->time_base)) {
     av_packet_rescale_ts(pkt, tb, ost->time_base);

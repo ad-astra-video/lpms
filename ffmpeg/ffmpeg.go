@@ -643,7 +643,7 @@ func createCOutputParams(input *TranscodeOptionsIn, ps []TranscodeOptions) ([]C.
 				return params, finalizer, err
 			}
 		}
-		fmt.Printf("encoder: %v output_accel: %v\n", encoder, p.Accel) //DEBUG LOG
+		//fmt.Printf("encoder: %v output_accel: %v\n", encoder, p.Accel) //DEBUG LOG
 		// preserve aspect ratio along the larger dimension when rescaling
 		filters := fmt.Sprintf("%s='w=if(gte(iw,ih),%d,-2):h=if(lt(iw,ih),%d,-2)'", scale_filter, w, h)
 		if interpAlgo != "" {
@@ -926,7 +926,7 @@ func (t *Transcoder) Transcode(input *TranscodeOptionsIn, ps []TranscodeOptions)
 		}
 	}
 	hw_type, err := accelDeviceType(input.Accel)
-	fmt.Printf("input accel: %v  hw_type: %v\n", input.Accel, hw_type) //DEBUG LOG
+	//fmt.Printf("input accel: %v  hw_type: %v\n", input.Accel, hw_type) //DEBUG LOG
 	if err != nil {
 		return nil, err
 	}

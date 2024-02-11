@@ -114,7 +114,7 @@ static int flush_outputs(struct input_ctx *ictx, struct output_ctx *octx)
 
 int transcode_shutdown(struct transcode_thread *h, int ret)
 {
-  //av_log(NULL, AV_LOG_WARNING, "shutting down transcoder\n");
+  //av_log(NULL, AV_LOG_WARNING, "shutting down transcoder\n"); //DEBUG LOG
 
   struct input_ctx *ictx = &h->ictx;
   struct output_ctx *outputs = h->outputs;
@@ -139,7 +139,7 @@ int transcode_shutdown(struct transcode_thread *h, int ret)
   if (ictx->ac) avcodec_free_context(&ictx->ac);
   if (ictx->vc && (AV_HWDEVICE_TYPE_NONE == ictx->hw_type)) {
       avcodec_free_context(&ictx->vc);
-      //av_log(NULL, AV_LOG_WARNING, "released input codec context\n");
+      //av_log(NULL, AV_LOG_WARNING, "released input codec context\n"); //DEBUG LOG
   }
   
   for (int i = 0; i < nb_outputs; i++) {
@@ -251,7 +251,7 @@ int transcode_init(struct transcode_thread *h, input_params *inp,
     }
   }
 
-  av_log(NULL, AV_LOG_WARNING, "transcode_init done\n"); //DEBUG log
+  //av_log(NULL, AV_LOG_WARNING, "transcode_init done\n"); //DEBUG log
   return 0;   // all ok
 
 transcode_cleanup:
@@ -290,7 +290,7 @@ void handle_discontinuity(struct input_ctx *ictx, AVPacket *pkt)
 
 int handle_audio_frame(struct transcode_thread *h, AVStream *ist, output_results *decoded_results, AVFrame *dframe)
 {
-  av_log(NULL, AV_LOG_WARNING, "start handle_audio_frame\n");
+  //av_log(NULL, AV_LOG_WARNING, "start handle_audio_frame\n"); //DEBUG LOG
   struct input_ctx *ictx = &h->ictx;
 
   // frame duration update
@@ -319,13 +319,13 @@ int handle_audio_frame(struct transcode_thread *h, AVStream *ist, output_results
       if (ret < 0) LPMS_ERR_RETURN("Error encoding audio");
     }
   }
-  av_log(NULL, AV_LOG_WARNING, "end handle_audio_frame\n");
+  //av_log(NULL, AV_LOG_WARNING, "end handle_audio_frame\n"); //DEBUG LOG
   return 0;
 }
 
 int handle_video_frame(struct transcode_thread *h, AVStream *ist, output_results *decoded_results, AVFrame *dframe)
 {
-  av_log(NULL, AV_LOG_WARNING, "start handle_video_frame\n");
+  //av_log(NULL, AV_LOG_WARNING, "start handle_video_frame\n"); //DEBUG LOG
   struct input_ctx *ictx = &h->ictx;
 
   // TODO: this was removed, but need to investigate if safe
@@ -361,7 +361,7 @@ int handle_video_frame(struct transcode_thread *h, AVStream *ist, output_results
       }
     }
   }
-  av_log(NULL, AV_LOG_WARNING, "end handle_video_frame\n");
+  //av_log(NULL, AV_LOG_WARNING, "end handle_video_frame\n"); //DEBUG LOG
   return 0;
 }
 
@@ -687,7 +687,7 @@ int transcode(struct transcode_thread *h,
   input_params *inp, output_params *params,
   output_results *decoded_results)
 {
-  av_log(NULL, AV_LOG_WARNING, "starting transcode\n"); //DEBUG log
+  //av_log(NULL, AV_LOG_WARNING, "starting transcode\n"); //DEBUG LOG
   int ret = 0;
   AVPacket *ipkt = NULL;
   AVFrame *dframe = NULL;
@@ -710,7 +710,7 @@ int transcode(struct transcode_thread *h,
     av_frame_unref(dframe);
     ret = process_in(ictx, dframe, ipkt, &stream_index);
 
-    av_log(NULL, AV_LOG_WARNING, "decoded packet: %d\n", ret); //DEBUG log
+    //av_log(NULL, AV_LOG_WARNING, "decoded packet: %d\n", ret); //DEBUG LOG
     if (ret == AVERROR_EOF) {
       // no more processing, go for flushes
       break;
@@ -856,7 +856,7 @@ int transcode(struct transcode_thread *h,
         av_packet_free(&pkt);
       } else if (has_frame) {
         ret = process_out(ictx, octx, encoder, ost, filter, dframe);
-        av_log(NULL, AV_LOG_WARNING, "encoded packet: %d\n", ret); //DEBUG log
+        //av_log(NULL, AV_LOG_WARNING, "encoded packet: %d\n", ret); //DEBUG LOG
       }
       if (AVERROR(EAGAIN) == ret || AVERROR_EOF == ret) continue;
       else if (ret < 0) LPMS_ERR(transcode_cleanup, "Error encoding");
