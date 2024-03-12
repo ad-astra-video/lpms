@@ -16,11 +16,14 @@ struct input_ctx {
   // Hardware decoding support
   AVBufferRef *hw_device_ctx;
   enum AVHWDeviceType hw_type;
+  enum AVPixelFormat hw_pix_fmt;
   char *device;
   char *xcoderParams;
 
   // Decoder flush
   AVPacket *first_pkt;
+  int first_v_frame_read;
+  int filters_reset_after_first_frame;
   int flushed;
   int flushing;
   // The diff of `packets sent - frames recv` serves as an estimate of

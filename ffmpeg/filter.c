@@ -5,6 +5,7 @@
 #include <libavfilter/buffersink.h>
 
 #include <libavutil/opt.h>
+#include <libavutil/avstring.h>
 
 #include <assert.h>
 
@@ -73,25 +74,53 @@ int init_video_filters(struct input_ctx *ictx, struct output_ctx *octx)
       ret = AVERROR(ENOMEM);
       LPMS_ERR(vf_init_cleanup, "Unable to allocate filters");
     }
-    if (ictx->vc->hw_device_ctx) in_pix_fmt = hw2pixfmt(ictx->vc);
+    av_log(NULL, AV_LOG_DEBUG, "testing if hw frames context exists\n");
+    if (ictx->vc->hw_frames_ctx) {
+      av_log(NULL, AV_LOG_DEBUG, "hw frames context found\n");
+      in_pix_fmt = ictx->hw_pix_fmt;
+    } else {
+      in_pix_fmt = AV_PIX_FMT_YUV420P;
+    }
 
+    av_log(NULL, AV_LOG_DEBUG, "filter pix_fmt: %s\n", av_get_pix_fmt_name(in_pix_fmt));
     /* buffer video source: the decoded frames from the decoder will be inserted here. */
+    
+    //setup init values to reference when checking if reinit needed
+    vf->init_format = in_pix_fmt;
+    vf->init_width = ictx->vc->width;
+    vf->init_height = ictx->vc->height;
+    vf->init_color_space = ictx->vc->colorspace;
+    vf->init_color_range = ictx->vc->color_range;
+
     snprintf(args, sizeof args,
-            "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
+            "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d:colorspace=%s:range=%s",
             ictx->vc->width, ictx->vc->height, in_pix_fmt,
             time_base.num, time_base.den,
-            ictx->vc->sample_aspect_ratio.num, ictx->vc->sample_aspect_ratio.den);
+            ictx->vc->sample_aspect_ratio.num, ictx->vc->sample_aspect_ratio.den,
+            av_color_space_name(ictx->vc->colorspace),
+            av_color_range_name(ictx->vc->color_range));
 
     ret = avfilter_graph_create_filter(&vf->src_ctx, buffersrc,
                                        "in", args, NULL, vf->graph);
     if (ret < 0) LPMS_ERR(vf_init_cleanup, "Cannot create video buffer source");
     if (ictx->vc && ictx->vc->hw_frames_ctx) {
+      av_log(NULL, AV_LOG_DEBUG, "hw context found, setting up hw filter sources\n");
+      //sleep(4);
+      filters_descr = av_strireplace(filters_descr, "hwupload_cuda,","");
       // XXX a bit problematic in that it's set before decoder is fully ready
       AVBufferSrcParameters *srcpar = av_buffersrc_parameters_alloc();
       srcpar->hw_frames_ctx = ictx->vc->hw_frames_ctx;
-      vf->hwframes = ictx->vc->hw_frames_ctx->data;
       av_buffersrc_parameters_set(vf->src_ctx, srcpar);
       av_freep(&srcpar);
+
+      ret = av_buffer_replace(&vf->hw_frames_ctx, ictx->vc->hw_frames_ctx);
+      if (ret < 0) LPMS_ERR(vf_init_cleanup, "Unable update reference to hw_frames_ctx");
+
+      //vf->hwframes = ictx->vc->hw_frames_ctx->data;
+      
+    } else {
+      //filters_descr = av_strireplace(filters_descr, "scale_npp","scale");
+      //filters_descr = av_strireplace(filters_descr, ":interp_algo=super","");
     }
 
     /* buffer video sink: to terminate the filter chain. */
@@ -102,6 +131,8 @@ int init_video_filters(struct input_ctx *ictx, struct output_ctx *octx)
     ret = av_opt_set_int_list(vf->sink_ctx, "pix_fmts", pix_fmts,
                               AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
     if (ret < 0) LPMS_ERR(vf_init_cleanup, "Cannot set output pixel format");
+
+    av_log(NULL, AV_LOG_INFO, "%s\n",filters_descr);
 
     ret = filtergraph_parser(vf, filters_descr, &inputs, &outputs);
     if (ret < 0) LPMS_ERR(vf_init_cleanup, "Unable to parse video filters desc");
@@ -150,6 +181,11 @@ int init_audio_filters(struct input_ctx *ictx, struct output_ctx *octx)
     ret = AVERROR(ENOMEM);
     LPMS_ERR(af_init_cleanup, "Unable to allocate audio filters");
   }
+
+  //setup init values to reference when checking if reinit needed
+  af->init_sample_rate = ictx->ac->sample_rate;
+  af->init_sample_format = ictx->ac->sample_fmt;
+  av_channel_layout_copy(&af->init_ch_layout, &ictx->ac->ch_layout);
 
   /* buffer audio source: the decoded frames from the decoder will be inserted here. */
   av_channel_layout_describe(&ictx->ac->ch_layout, ch_layout_buf, sizeof(ch_layout_buf));
@@ -234,13 +270,13 @@ int init_signature_filters(struct output_ctx *octx, AVFrame *inf)
     if (octx->vc && inf && inf->hw_frames_ctx) {
       AVBufferSrcParameters *srcpar = av_buffersrc_parameters_alloc();      
       srcpar->hw_frames_ctx = inf->hw_frames_ctx;
-      sf->hwframes = inf->hw_frames_ctx->data;
+      //sf->hwframes = inf->hw_frames_ctx->data;
       av_buffersrc_parameters_set(sf->src_ctx, srcpar);
       av_freep(&srcpar);
     } else if (octx->vc && octx->vc->hw_frames_ctx) {
       AVBufferSrcParameters *srcpar = av_buffersrc_parameters_alloc();
       srcpar->hw_frames_ctx = octx->vc->hw_frames_ctx;
-      sf->hwframes = octx->vc->hw_frames_ctx->data;
+      //sf->hwframes = octx->vc->hw_frames_ctx->data;
       av_buffersrc_parameters_set(sf->src_ctx, srcpar);
       av_freep(&srcpar);
     }
@@ -274,32 +310,80 @@ sf_init_cleanup:
 
 int filtergraph_write(AVFrame *inf, struct input_ctx *ictx, struct output_ctx *octx, struct filter_ctx *filter, int is_video)
 {
+  if (!inf) {
+    if (is_video) {
+      av_log(NULL, AV_LOG_DEBUG, "no video frame to write to filter\n");
+    } else {
+      av_log(NULL, AV_LOG_DEBUG, "no audio frame to write to filter\n");
+    }
+  }
   int ret = 0;
   // We have to reset the filter because we initially set the filter
   // before the decoder is fully ready, and the decoder may change HW params
   // XXX: Unclear if this path is hit on all devices
-  if (is_video && inf && inf->hw_frames_ctx && filter->hwframes &&
-      inf->hw_frames_ctx->data != filter->hwframes) {
+  
+  // similar check done in ffmpeg_filter.c send_frame function for HWACCEL_CHANGED check to reinit filters
+  if (is_video && inf && (!!filter->hw_frames_ctx != !!inf->hw_frames_ctx ||
+        (filter->hw_frames_ctx->data && inf->hw_frames_ctx->data && filter->hw_frames_ctx->data != inf->hw_frames_ctx->data))) {
     free_filter(&octx->vf); // XXX really should flush filter first
+    LPMS_WARN("reinitializing video filters for hardware change");
     ret = init_video_filters(ictx, octx);
     if (ret < 0) return lpms_ERR_FILTERS;
+    filter->reinit_for_hw_change = 1;
   }
 
+  //check both video and audio filters for property changes. Returns 1 if properties changed
+  if (inf) {
+    ret = reinit_filters_for_prop_change(filter, inf, is_video);
+    if (ret > 0) {
+      if (is_video) {
+        free_filter(&octx->vf);
+        ret = init_video_filters(ictx, octx);
+        if (ret < 0) return lpms_ERR_FILTERS;
+      } else {
+        free_filter(&octx->af);
+        ret = init_audio_filters(ictx, octx);
+        if (ret < 0) return lpms_ERR_FILTERS;
+      }
+    }
+  }
+  
+  
   // Timestamp handling code
   AVStream *vst = ictx->ic->streams[ictx->vi];
   if (inf) { // Non-Flush Frame
+    
     inf->opaque = (void *) inf->pts; // Store original PTS for calc later
-    if (is_video && octx->fps.den) {
-      // Custom PTS set when FPS filter is used
-      filter->custom_pts += av_rescale_q(1, av_inv_q(vst->r_frame_rate), vst->time_base);
+    if (is_video) {
+      if (octx->fps.den) {
+        // Custom PTS set when FPS filter is used
+        filter->custom_pts += av_rescale_q(1, av_inv_q(vst->r_frame_rate), vst->time_base);
+      }
     } else {
       filter->custom_pts = inf->pts;
-    }
+    }    
+    
   } else if (!filter->flushed) { // Flush Frame
     int ts_step;
     inf = (is_video) ? ictx->last_frame_v : ictx->last_frame_a;
+
+    if (is_video) {
+      inf->width = filter->init_width;
+      inf->height = filter->init_height;
+      inf->format = filter->init_format;
+      inf->colorspace = filter->init_color_space;
+      inf->color_range = filter->init_color_range;
+      av_log(NULL,AV_LOG_DEBUG,"video frame properties updated to match filters for flush frame (format: %s)\n", av_get_pix_fmt_name(inf->format));
+    } else {
+      inf->format = filter->init_sample_format;
+      inf->sample_rate = filter->init_sample_rate;
+      av_channel_layout_copy(&inf->ch_layout, &filter->init_ch_layout);
+      av_log(NULL,AV_LOG_DEBUG,"audio frame properties updated to match filters for flush frame (format: %s)\n", av_get_sample_fmt_name(inf->format));
+    }
+
     inf->opaque = (void *) (INT64_MIN); // Store INT64_MIN as pts for flush frames
     filter->flushing = 1;
+    av_log(NULL, AV_LOG_DEBUG, "sending filter flush frame (width: %d, height: %d)\n", ictx->last_frame_v->width, ictx->last_frame_v->height);
     if (is_video) {
       ts_step = av_rescale_q(1, av_inv_q(vst->r_frame_rate), vst->time_base);
       if (octx->fps.den && !octx->res->frames) {
@@ -313,7 +397,7 @@ int filtergraph_write(AVFrame *inf, struct input_ctx *ictx, struct output_ctx *o
     }
     filter->custom_pts += ts_step;
   }
-
+  av_log(NULL, AV_LOG_DEBUG, "writing frame to filter\n");
   if (inf) {
     // Apply the custom pts, then reset for the next output
     int old_pts = inf->pts;
@@ -330,8 +414,10 @@ int filtergraph_read(struct input_ctx *ictx, struct output_ctx *octx, struct fil
 {
     AVFrame *frame = filter->frame;
     av_frame_unref(frame);
-
+    av_log(NULL, AV_LOG_DEBUG,"retrieve from sink\n");
+    if (!filter->sink_ctx) LPMS_DEBUG("filter->sink_ctx not set");
     int ret = av_buffersink_get_frame(filter->sink_ctx, frame);
+    av_log(NULL, AV_LOG_DEBUG,"frame retrieved from sink\n");
     frame->pict_type = AV_PICTURE_TYPE_NONE;
 
     if (AVERROR(EAGAIN) == ret || AVERROR_EOF == ret) return ret;
@@ -340,6 +426,7 @@ int filtergraph_read(struct input_ctx *ictx, struct output_ctx *octx, struct fil
     if (frame && ((int64_t) frame->opaque == INT64_MIN)) {
       // opaque being INT64_MIN means it's a flush packet
       // don't set flushed flag in case this is a flush from a previous segment
+      av_log(NULL, AV_LOG_DEBUG, "flush frame found, no more frames in filter\n");
       if (filter->flushing) filter->flushed = 1;
       ret = lpms_ERR_FILTER_FLUSHED;
     } else if (frame && is_video && octx->fps.den) {
@@ -359,7 +446,52 @@ fg_read_cleanup:
 
 void free_filter(struct filter_ctx *filter)
 {
+  av_buffer_unref(&filter->hw_frames_ctx);
   if (filter->frame) av_frame_free(&filter->frame);
   if (filter->graph) avfilter_graph_free(&filter->graph);
   memset(filter, 0, sizeof(struct filter_ctx));
 }
+
+//see send_frame in  ffmpeg_filter.c ifilter_parameters_from_frame as guide
+int reinit_filters_for_prop_change(struct filter_ctx *filter, AVFrame *frame, int is_video)
+{
+  int need_reinit = 0;
+  /* determine if the parameters for this input changed */
+  if (frame) {
+    if (is_video) {    
+      av_log(NULL, AV_LOG_DEBUG, "checking video filter re-init for property change\n");
+      if (filter->init_format != frame->format ||
+          filter->init_width != frame->width ||
+          filter->init_height != frame->height ||
+          filter->init_color_space != frame->colorspace ||
+          filter->init_color_range != frame->color_range) {
+            av_log(NULL, AV_LOG_DEBUG,"filter fmt: %s, frame fmt: %s\n", av_get_pix_fmt_name(filter->init_format), av_get_pix_fmt_name(frame->format));
+            av_log(NULL, AV_LOG_DEBUG,"filter width: %d, frame width: %d\n", filter->init_width, frame->width);
+            av_log(NULL, AV_LOG_DEBUG,"filter height: %d, frame height: %d\n", filter->init_height, frame->height);
+            av_log(NULL, AV_LOG_DEBUG, "video filter will reinitialize for property change\n");
+            need_reinit = 1;
+          }
+    } else {
+      av_log(NULL, AV_LOG_DEBUG, "checking audio filter re-init for property change\n");
+      if (filter->init_sample_format != frame->format ||
+            filter->init_sample_rate != frame->sample_rate ||
+            av_channel_layout_compare(&filter->init_ch_layout, &frame->ch_layout)) {
+              //reinitialize audio filters
+              av_log(NULL, AV_LOG_DEBUG, "filter->format: %s frame format: %s\n", av_get_sample_fmt_name(filter->init_sample_format), av_get_sample_fmt_name(frame->format));
+              av_log(NULL, AV_LOG_DEBUG, "filter->sample_rate: %d frame width: %d\n", filter->init_sample_rate, frame->sample_rate);
+              av_log(NULL, AV_LOG_DEBUG, "filter->ch_layout changed: %d\n", av_channel_layout_compare(&filter->init_ch_layout, &frame->ch_layout));
+              av_log(NULL, AV_LOG_DEBUG, "audio filter will reinitialize for property change\n");
+              need_reinit = 1;
+            }
+    }
+
+    if (!need_reinit) {
+      av_log(NULL, AV_LOG_DEBUG, "no filter reinit needed for property change\n");
+    }
+  } else {
+    av_log(NULL, AV_LOG_DEBUG, "frame is not set\n");
+  }
+
+  return need_reinit;
+}
+

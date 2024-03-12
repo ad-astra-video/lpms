@@ -6,6 +6,7 @@
 #include "filter.h"
 
 int open_output(struct output_ctx *octx, struct input_ctx *ictx);
+int filter_output_to_encoder(struct output_ctx *octx, struct input_ctx *ictx);
 int reopen_output(struct output_ctx *octx, struct input_ctx *ictx);
 void close_output(struct output_ctx *octx);
 void free_output(struct output_ctx *octx);

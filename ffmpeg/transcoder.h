@@ -6,6 +6,7 @@
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavfilter/avfilter.h>
+#include <libavutil/pixdesc.h>
 #include "logging.h"
 
 // LPMS specific errors

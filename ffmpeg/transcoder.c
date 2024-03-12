@@ -19,7 +19,7 @@ const int lpms_ERR_PACKET_ONLY = FFERRTAG('P','K','O','N');
 const int lpms_ERR_FILTER_FLUSHED = FFERRTAG('F','L','F','L');
 const int lpms_ERR_OUTPUTS = FFERRTAG('O','U','T','P');
 const int lpms_ERR_UNRECOVERABLE = FFERRTAG('U', 'N', 'R', 'V');
-
+const int lpms_ERR_HW_GENERIC = -542398533;
 //
 //  Notes on transcoder internals:
 //
@@ -711,6 +711,9 @@ int transcode(struct transcode_thread *h,
     }
     else if (lpms_ERR_PACKET_ONLY == ret) ; // keep going for stream copy
     else if (ret == AVERROR(EAGAIN)) ;  // this is a-ok
+    else if (lpms_ERR_HW_GENERIC == ret) {
+      LPMS_ERR(transcode_cleanup, "Generic error in hardware");
+    }
     else if (lpms_ERR_INPUT_NOKF == ret) {
       LPMS_ERR(transcode_cleanup, "Could not decode; No keyframes in input");
     } else if (ret < 0) LPMS_ERR(transcode_cleanup, "Could not decode; stopping");

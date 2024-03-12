@@ -860,6 +860,8 @@ func destroyCOutputParams(params []C.output_params) {
 func (t *Transcoder) Transcode(input *TranscodeOptionsIn, ps []TranscodeOptions) (*TranscodeResults, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	glog.Infof("input params: +%v", input)
+	glog.Infof("input params: +%v", ps)
 	if t.stopped || t.handle == nil {
 		return nil, ErrTranscoderStp
 	}
@@ -1058,7 +1060,7 @@ func InitFFmpeg() {
 }
 
 func InitFFmpegWithDebug() {
-	InitFFmpegWithLogLevel(FFLogWarning)
+	InitFFmpegWithLogLevel(FFLogDebug)
 
 	C.lpms_print_av_codecs()
 
@@ -1090,7 +1092,7 @@ func hwScale() string {
 		// we don't build windows binaries with CUDA SDK, so need to use scale_cuda instead of scale_npp
 		return "scale_cuda"
 	} else {
-		return "scale_npp"
+		return "hwupload_cuda,scale_npp"
 	}
 }
 

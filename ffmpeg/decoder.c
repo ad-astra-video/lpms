@@ -4,10 +4,12 @@
 
 #include <libavutil/pixfmt.h>
 
+
 static int lpms_send_packet(struct input_ctx *ictx, AVCodecContext *dec, AVPacket *pkt)
 {
     int ret = avcodec_send_packet(dec, pkt);
     if (ret == 0 && dec == ictx->vc) ictx->pkt_diff++; // increase buffer count for video packets
+    av_log(NULL, AV_LOG_INFO, "packet sent\n");
     return ret;
 }
 
@@ -19,6 +21,7 @@ static int lpms_receive_frame(struct input_ctx *ictx, AVCodecContext *dec, AVFra
       ictx->pkt_diff--; // decrease buffer count for non-sentinel video frames
       if (ictx->flushing) ictx->sentinel_count = 0;
     }
+    av_log(NULL, AV_LOG_DEBUG, "LPMS frame received\n");
     return ret;
 }
 
@@ -38,6 +41,11 @@ packet_cleanup:
 
 int demux_in(struct input_ctx *ictx, AVPacket *pkt)
 {
+  av_log(NULL, AV_LOG_DEBUG, "LPMS frame read\n");
+  if (!ictx->first_v_frame_read && pkt && pkt->stream_index == ictx->vi) {
+    ictx->first_v_frame_read = 1;
+  }
+
   return av_read_frame(ictx->ic, pkt);
 }
 
@@ -75,9 +83,12 @@ int decode_in(struct input_ctx *ictx, AVPacket *pkt, AVFrame *frame, int *stream
 
   ret = lpms_send_packet(ictx, decoder, pkt);
   if (ret < 0) {
-    LPMS_ERR_RETURN("Error sending packet to decoder");
+    //ret = lpms_receive_frame(ictx, decoder, ictx->last_frame_v);
+    //LPMS_ERR_RETURN("Error sending packet to decoder");
+  } else {
+    ret = lpms_receive_frame(ictx, decoder, frame);
   }
-  ret = lpms_receive_frame(ictx, decoder, frame);
+  
   if (ret == AVERROR(EAGAIN)) {
     // This is not really an error. It may be that packet just fed into
     // the decoder may be not enough to complete decoding. Upper level will
@@ -86,6 +97,7 @@ int decode_in(struct input_ctx *ictx, AVPacket *pkt, AVFrame *frame, int *stream
   } else if (ret < 0) {
     LPMS_ERR_RETURN("Error receiving frame from decoder");
   } else {
+    ictx->last_frame_v = av_frame_clone(frame);
     return ret;
   }
 }
@@ -154,6 +166,7 @@ int process_in(struct input_ctx *ictx, AVFrame *frame, AVPacket *pkt,
 // FIXME: name me and the other function better
 enum AVPixelFormat hw2pixfmt(AVCodecContext *ctx)
 {
+  av_log(NULL, AV_LOG_DEBUG, "finding hw pix fmt\n");
   const AVCodec *decoder = ctx->codec;
   struct input_ctx *params = (struct input_ctx*)ctx->opaque;
   for (int i = 0;; i++) {
@@ -162,11 +175,14 @@ enum AVPixelFormat hw2pixfmt(AVCodecContext *ctx)
       LPMS_WARN("Decoder does not support hw decoding");
       return AV_PIX_FMT_NONE;
     }
+    av_log(NULL, AV_LOG_DEBUG, "hw pix fmt of: %s\n", av_get_pix_fmt_name(config->pix_fmt));
     if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
         config->device_type == params->hw_type) {
       return  config->pix_fmt;
     }
   }
+  LPMS_WARN("No hardware pix fmt found");
+  
   return AV_PIX_FMT_NONE;
 }
 
@@ -175,36 +191,74 @@ enum AVPixelFormat hw2pixfmt(AVCodecContext *ctx)
  */
 static enum AVPixelFormat get_hw_pixfmt(AVCodecContext *vc, const enum AVPixelFormat *pix_fmts)
 {
-  AVHWFramesContext *frames;
+  av_log(NULL, AV_LOG_DEBUG, "get_format called\n");
+  const enum AVPixelFormat *p;
+  struct input_ctx *ictx = (struct input_ctx*)vc->opaque;
+  AVHWFramesContext *frames_ctx = NULL;
   int ret = 0;
-
   // XXX Ideally this would be auto initialized by the HW device ctx
   //     However the initialization doesn't occur in time to set up filters
   //     So we do it here. Also see avcodec_get_hw_frames_parameters
-  av_buffer_unref(&vc->hw_frames_ctx);
-  vc->hw_frames_ctx = av_hwframe_ctx_alloc(vc->hw_device_ctx);
-  if (!vc->hw_frames_ctx) LPMS_ERR(pixfmt_cleanup, "Unable to allocate hwframe context for decoding");
+  //av_buffer_unref(&vc->hw_frames_ctx);
+  
+  for (p = pix_fmts; *p != -1; p++) {
+    av_log(NULL, AV_LOG_DEBUG, "codec pix_fmt: %s\n", av_get_pix_fmt_name(*p));
+    if (*p == ictx->hw_pix_fmt) {
+      av_log(NULL, AV_LOG_DEBUG, "hw pix fmt found, setting up hw_frames_ctx\n");
+      
+      
+      ret = avcodec_get_hw_frames_parameters(vc, vc->hw_device_ctx, ictx->hw_pix_fmt, &vc->hw_frames_ctx);
+      frames_ctx = (AVHWFramesContext*)vc->hw_frames_ctx->data;
 
-  frames = (AVHWFramesContext*)vc->hw_frames_ctx->data;
-  frames->format = hw2pixfmt(vc);
-  frames->sw_format = vc->sw_pix_fmt;
-  frames->width = vc->width;
-  frames->height = vc->height;
+      if (frames_ctx->initial_pool_size) {
+          // We guarantee 4 base work surfaces. The function above guarantees 1
+          // (the absolute minimum), so add the missing count.
+          frames_ctx->initial_pool_size += 3;
+      }
+      
+      av_log(NULL, AV_LOG_WARNING, "hw_frames_ctx setup, initializing  (w: %d, h: %d, sw_format: %s, format: %s)\n", 
+                    frames_ctx->width, frames_ctx->height, av_get_pix_fmt_name(frames_ctx->sw_format), av_get_pix_fmt_name(frames_ctx->format));
 
-  // May want to allocate extra HW frames if we encounter samples where
-  // the defaults are insufficient. Raising this increases GPU memory usage
-  // For now, the defaults seems OK.
-  //vc->extra_hw_frames = 16 + 1; // H.264 max refs
+      ret = av_hwframe_ctx_init(vc->hw_frames_ctx);
+      if (AVERROR(ENOSYS) == ret) ret = lpms_ERR_INPUT_PIXFMT; // most likely
+      if (ret < 0) LPMS_ERR(pixfmt_cleanup, "Unable to initialize a hardware frame pool");
+      
+      /*
+      vc->hw_frames_ctx = av_hwframe_ctx_alloc(vc->hw_device_ctx);
+      if (!vc->hw_frames_ctx) LPMS_ERR(pixfmt_cleanup, "Unable to allocate hwframe context for decoding");
 
-  ret = av_hwframe_ctx_init(vc->hw_frames_ctx);
-  if (AVERROR(ENOSYS) == ret) ret = lpms_ERR_INPUT_PIXFMT; // most likely
-  if (ret < 0) LPMS_ERR(pixfmt_cleanup, "Unable to initialize a hardware frame pool");
-  return frames->format;
+      frames = (AVHWFramesContext*)(vc->hw_frames_ctx->data);
+      
+      frames->format = ictx->hw_pix_fmt;
+      frames->sw_format = vc->sw_pix_fmt;
+      frames->width = vc->width;
+      frames->height = vc->height;
+      // May want to allocate extra HW frames if we encounter samples where
+      // the defaults are insufficient. Raising this increases GPU memory usage
+      // For now, the defaults seems OK.
+      //vc->extra_hw_frames = 16 + 1; // H.264 max refs
+      vc->extra_hw_frames = 2;
+      
+      ret = av_hwframe_ctx_init(vc->hw_frames_ctx);
+      if (AVERROR(ENOSYS) == ret) ret = lpms_ERR_INPUT_PIXFMT; // most likely
+      if (ret < 0) LPMS_ERR(pixfmt_cleanup, "Unable to initialize a hardware frame pool");
+      
+      return frames->format;
+      */
+     av_log(NULL, AV_LOG_DEBUG, "hw_frames_ctx init complete\n");
+     return *p;
+    }
+  }
+  
+  for (p = pix_fmts; *p != -1; p++) {
+    if (p == AV_PIX_FMT_YUV420P) {
+      return *p;
+    }
+  }
 
 pixfmt_cleanup:
   return AV_PIX_FMT_NONE;
 }
-
 
 int open_audio_decoder(input_params *params, struct input_ctx *ctx)
 {
@@ -241,15 +295,15 @@ char* get_hw_decoder(int ff_codec_id, int hw_type)
         case AV_HWDEVICE_TYPE_CUDA:
             switch (ff_codec_id) {
                 case AV_CODEC_ID_H264:
-                    return "h264_cuvid";
+                    return "h264";
                 case AV_CODEC_ID_HEVC:
-                    return "hevc_cuvid";
+                    return "hevc";
                 case AV_CODEC_ID_VP8:
-                    return "vp8_cuvid";
+                    return "vp8";
                 case AV_CODEC_ID_VP9:
-                    return "vp9_cuvid";
+                    return "vp9";
                 case AV_CODEC_ID_AV1:
-                    return "av1_cuvid";
+                    return "av1";
                 default:
                     return "";
             }
@@ -272,26 +326,48 @@ char* get_hw_decoder(int ff_codec_id, int hw_type)
 }
 
 int open_video_decoder(input_params *params, struct input_ctx *ctx)
-{
+{ 
+
   int ret = 0;
+  AVCodecContext *vc = NULL;
   const AVCodec *codec = NULL;
   AVDictionary **opts = NULL;
   AVFormatContext *ic = ctx->ic;
+  enum AVCodecID codec_id;
   // open video decoder
   ctx->vi = av_find_best_stream(ic, AVMEDIA_TYPE_VIDEO, -1, -1, &codec, 0);
   if (ctx->dv) ; // skip decoding video
   else if (ctx->vi < 0) {
     LPMS_WARN("No video stream found in input");
   } else {
+    for (int i = 0;; i++) {
+        const AVCodecHWConfig *config = avcodec_get_hw_config(codec, i);
+        if (!config) {
+            fprintf(stderr, "Decoder %s does not support device type %s.\n",
+                    codec->name, av_hwdevice_get_type_name(params->hw_type));
+            return -1;
+        }
+        if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
+            config->device_type == params->hw_type) {
+            av_log(NULL, AV_LOG_WARNING, "found hw pix fmt that matches device type\n");
+            ctx->hw_pix_fmt = config->pix_fmt;
+            break;
+        }
+    }
+
     if (params->hw_type > AV_HWDEVICE_TYPE_NONE) {
+      av_log(NULL, AV_LOG_WARNING, "opening harware decoder\n");
       char* decoder_name = get_hw_decoder(codec->id, params->hw_type);
       if (!*decoder_name) {
         ret = lpms_ERR_INPUT_CODEC;
         LPMS_ERR(open_decoder_err, "Input codec does not support hardware acceleration");
       }
+      
       const AVCodec *c = avcodec_find_decoder_by_name(decoder_name);
       if (c) codec = c;
       else LPMS_WARN("Nvidia decoder not found; defaulting to software");
+      
+
       if (AV_PIX_FMT_YUV420P != ic->streams[ctx->vi]->codecpar->format &&
           AV_PIX_FMT_YUVJ420P != ic->streams[ctx->vi]->codecpar->format) {
         // TODO check whether the color range is truncated if yuvj420p is used
@@ -301,34 +377,51 @@ int open_video_decoder(input_params *params, struct input_ctx *ctx)
     } else if (params->video.name && strlen(params->video.name) != 0) {
       // Try to find user specified decoder by name
       const AVCodec *c = avcodec_find_decoder_by_name(params->video.name);
-      av_log(NULL, AV_LOG_WARNING, "selecting decoder for, %s\n", params->video.name);
+      //av_log(NULL, AV_LOG_WARNING, "selecting decoder for, %s\n", params->video.name); //DEBUG LOG
       if (c) codec = c;
       if (params->video.opts) opts = &params->video.opts;
     }
-    AVCodecContext *vc = avcodec_alloc_context3(codec);
+    
+
+    vc = avcodec_alloc_context3(codec);
+    vc->hwaccel_flags |= AV_HWACCEL_FLAG_ALLOW_PROFILE_MISMATCH;
     if (!vc) LPMS_ERR(open_decoder_err, "Unable to alloc video codec");
-    ctx->vc = vc;
+
+    ic->streams[ctx->vi]->codecpar->format = ctx->hw_pix_fmt;
     ret = avcodec_parameters_to_context(vc, ic->streams[ctx->vi]->codecpar);
     if (ret < 0) LPMS_ERR(open_decoder_err, "Unable to assign video params");
     vc->opaque = (void*)ctx;
+    
     // XXX Could this break if the original device falls out of scope in golang?
     if (params->hw_type == AV_HWDEVICE_TYPE_CUDA) {
+      
       // First set the hw device then set the hw frame
+      av_log(NULL, AV_LOG_DEBUG, "setting up hw device\n");
       ret = av_hwdevice_ctx_create(&ctx->hw_device_ctx, params->hw_type, params->device, NULL, 0);
-      if (ret < 0) LPMS_ERR(open_decoder_err, "Unable to open hardware context for decoding")
+      if (ret < 0) LPMS_ERR(open_decoder_err, "Unable to open hardware context for decoding");
       vc->hw_device_ctx = av_buffer_ref(ctx->hw_device_ctx);
+      
       vc->get_format = get_hw_pixfmt;
     }
+    
     ctx->hw_type = params->hw_type;
     vc->pkt_timebase = ic->streams[ctx->vi]->time_base;
     av_opt_set(vc->priv_data, "xcoder-params", ctx->xcoderParams, 0);
     ret = avcodec_open2(vc, codec, opts);
     if (ret < 0) LPMS_ERR(open_decoder_err, "Unable to open video decoder");
+    av_log(NULL, AV_LOG_DEBUG, "codec opened\n");    
+    
+    //force a early call to get_format to setup hw_frames_ctx needed for filters
+    //enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_YUV420P, ctx->hw_pix_fmt, AV_PIX_FMT_NONE }; // XXX ensure the encoder allows this
+    //vc->get_format(vc, pix_fmts);
+
+    ctx->vc = vc;
   }
 
   return 0;
 
 open_decoder_err:
+  av_log(NULL, AV_LOG_WARNING, "open decoder had error\n");
   free_input(ctx);
   if (ret == AVERROR_UNKNOWN) ret = lpms_ERR_UNRECOVERABLE;
   return ret;
@@ -341,7 +434,7 @@ int open_input(input_params *params, struct input_ctx *ctx)
   int ret = 0;
 
   ctx->transmuxing = params->transmuxe;
-  av_log(NULL, AV_LOG_WARNING, "opening input, hw_type=%d\n", params->hw_type);
+  //av_log(NULL, AV_LOG_WARNING, "opening input, hw_type=%d\n", params->hw_type); //DEBUG LOG
   // open demuxer
   ret = avformat_open_input(&ic, inp, NULL, NULL);
   if (ret < 0) LPMS_ERR(open_input_err, "demuxer: Unable to open input");
@@ -379,4 +472,3 @@ void free_input(struct input_ctx *inctx)
   if (inctx->last_frame_v) av_frame_free(&inctx->last_frame_v);
   if (inctx->last_frame_a) av_frame_free(&inctx->last_frame_a);
 }
-

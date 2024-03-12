@@ -6,12 +6,24 @@
 
 struct filter_ctx {
   int active;
+  int reinit_for_hw_change;
   AVFilterGraph *graph;
   AVFrame *frame;
   AVFilterContext *sink_ctx;
   AVFilterContext *src_ctx;
+  //video init params to check for frame changes
+  int init_format;
+  int init_width;
+  int init_height;
+  enum AVColorSpace init_color_space;
+  enum AVColorRange init_color_range;
+  //audio init params to check for frame changes
+  enum AVSampleFormat init_sample_format;
+  int init_sample_rate;
+  AVChannelLayout init_ch_layout;
 
-  uint8_t *hwframes; // GPU frame pool data
+  AVBufferRef *hw_frames_ctx;
+  //uint8_t *hwframes; // GPU frame pool data
 
   // The fps filter expects monotonically increasing PTS, which might not hold
   // for our input segments (they may be out of order, or have dropped frames).
@@ -78,6 +90,7 @@ int init_signature_filters(struct output_ctx *octx, AVFrame *inf);
 int filtergraph_write(AVFrame *inf, struct input_ctx *ictx, struct output_ctx *octx, struct filter_ctx *filter, int is_video);
 int filtergraph_read(struct input_ctx *ictx, struct output_ctx *octx, struct filter_ctx *filter, int is_video);
 void free_filter(struct filter_ctx *filter);
+int reinit_filters_for_prop_change(struct filter_ctx *filter, AVFrame *frame, int is_video);
 
 // UTILS
 static inline int is_copy(char *encoder) {
