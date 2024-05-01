@@ -1035,7 +1035,7 @@ func setGops(t *testing.T, accel Acceleration) {
 
         # extremely low frame rate
         ffmpeg -loglevel warning -i test.ts -c:v libx264 -r 1 lowfps.ts
-        ffprobe -loglevel warning lowfps.ts -select_streams v -show_packets | grep flags= | wc -l | grep 9
+        ffprobe -loglevel warning lowfps.ts -select_streams v -show_packets | grep flags= | wc -l | grep 10
         ffprobe -loglevel warning lowfps.ts -select_streams v -show_packets | grep flags=K | wc -l | grep 1
     `
 	run(cmd)
@@ -1103,18 +1103,18 @@ func setGops(t *testing.T, accel Acceleration) {
         check passthrough3.ts
 
         # low framerate checks. sanity check number of packets vs keyframes
-        ffprobe -loglevel warning lpms_lowfps.ts -select_streams v -show_packets | grep flags= | wc -l | grep 9
+        ffprobe -loglevel warning lpms_lowfps.ts -select_streams v -show_packets | grep flags= | wc -l | grep 10
         ffprobe -loglevel warning lpms_lowfps.ts -select_streams v -show_packets | grep flags=K | wc -l | grep 5
 
         # intra checks with passthrough fps.
         # sanity check number of packets vs keyframes
-        ffprobe -loglevel warning lpms_intra.ts -select_streams v -show_packets| grep flags= | wc -l | grep 9
-        ffprobe -loglevel warning lpms_intra.ts -select_streams v -show_packets|grep flags=K | wc -l | grep 9
+        ffprobe -loglevel warning lpms_intra.ts -select_streams v -show_packets| grep flags= | wc -l | grep 10
+        ffprobe -loglevel warning lpms_intra.ts -select_streams v -show_packets|grep flags=K | wc -l | grep 10
 
         # intra checks with fixed fps.
         # sanity check number of packets vs keyframes
-        ffprobe -loglevel warning lpms_intra_10fps.ts -select_streams v -show_packets | grep flags= | wc -l | grep 90
-        ffprobe -loglevel warning lpms_intra_10fps.ts -select_streams v -show_packets | grep flags=K | wc -l | grep 90
+        ffprobe -loglevel warning lpms_intra_10fps.ts -select_streams v -show_packets | grep flags= | wc -l | grep 100
+        ffprobe -loglevel warning lpms_intra_10fps.ts -select_streams v -show_packets | grep flags=K | wc -l | grep 100
     `
 	run(cmd)
 
