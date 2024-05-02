@@ -773,10 +773,11 @@ func TestTranscoder_FractionalFPS(t *testing.T) {
 func consecutiveMP4s(t *testing.T, accel Acceleration) {
 	run, dir := setupTest(t)
 	defer os.RemoveAll(dir)
+	//mp4 segment cmd was only creating 3 mp4 files with update to 6.1.1, updated to split at exact frames with 60fps test.ts
 	cmd := `
   cp "$1"/../transcoder/test.ts .
-  ffmpeg -i test.ts -c copy -f segment test%d.mp4
-  ffmpeg -i test.ts -c copy -f segment test%d.ts
+  ffmpeg -i test.ts -c copy -f segment -segment_frames 120,240,360,480 test%d.mp4
+  ffmpeg -i test.ts -c copy -f segment -segment_frames 120,240,360,480 test%d.ts
 
   # manually convert ts to mp4 just to sanity check
   ffmpeg -i test0.ts -c copy -copyts -f mp4 test0.tsmp4
