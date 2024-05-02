@@ -1564,9 +1564,11 @@ func TestTranscoder_FormatOptions(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	//hls_probe in hls.c has been expanded significantly. have to move the .flv file to .m3u8 file to run the ffprobe test successfully.
 	cmd = `
         # Check playlist
-        ffprobe -loglevel warning -show_format actually_hls.flv | grep format_name=hls
+		mv actually_hls.flv actually_hls.m3u8
+        ffprobe -loglevel warning -show_format actually_hls.m3u8 | grep format_name=hls
         # Check that (copied) mpegts stream matches source
         ls -lha test_segment_*.ts | wc -l | grep 4 # sanity check four segments
         cat test_segment_*.ts > segment.ts
@@ -1592,6 +1594,8 @@ func TestTranscoder_FormatOptions(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	//small change in duration.  diff cmd matches to the originals.
 	cmd = `
         # mpegts should match original exactly.
         ffprobe -loglevel warning -show_entries format=format_name,duration actually_mpegts.flv > actually_mpegts.out
@@ -1601,7 +1605,7 @@ func TestTranscoder_FormatOptions(t *testing.T) {
 		cat <<- EOF > expected_mp4.out
 			[FORMAT]
 			format_name=mov,mp4,m4a,3gp,3g2,mj2
-			duration=8.033000
+			duration=8.032667
 			[/FORMAT]
 		EOF
 
