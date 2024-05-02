@@ -266,7 +266,7 @@ func TestTranscoder_SampleRate(t *testing.T) {
 			# 1024 = samples per frame, 48000 = samples per second
 
 			# select last frame pts, subtract from first frame pts, check diff
-			ffprobe -loglevel warning -show_frames  -select_streams a "$2"  | grep pkt_pts= | head -"$1" | awk 'BEGIN{FS="="} ; NR==1 { fst = $2 } ; END{ diff=(($2-fst)/90000); exit diff <= 0.979 || diff >= 1.021 }'
+			ffprobe -loglevel warning -show_frames  -select_streams a "$2"  | grep pts= | head -"$1" | awk 'BEGIN{FS="="} ; NR==1 { fst = $2 } ; END{ diff=(($2-fst)/90000); exit diff <= 0.979 || diff >= 1.021 }'
 		EOF
 		chmod +x check_ts
 
