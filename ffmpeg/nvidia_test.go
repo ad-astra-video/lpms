@@ -61,16 +61,19 @@ func TestNvidia_Pixfmts(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	prof := P240p30fps16x9
-
+	//original command of ffmpeg with the -t flag is not working...not sure why.  it won't open the resulting file.
+	//changing to select the first 60 frames works
+	//cmd replaced: ffmpeg -loglevel warning -i test.ts -an -c:v copy -t 2 in420p%d.mp4
 	cmd := `
 	cp "$1/../transcoder/test.ts" test.ts
 	# sanity check original input type is 420p
-    ffmpeg -loglevel warning -i test.ts -an -c:v copy -t 1 in420p.mp4
-    ffprobe -loglevel warning in420p.mp4  -show_streams -select_streams v | grep pix_fmt=yuv420p
+    ffmpeg -loglevel warning -i test.ts -c:v copy -f segment -segment_frames 60 in420p%d.mp4
+	mv in420p0.mp4 in420p.mp4
+	ffprobe -loglevel warning in420p.mp4 -show_streams -select_streams v | grep pix_fmt=yuv420p
 
     # generate unsupported 422p type
     ffmpeg -loglevel warning -i test.ts -an -c:v libx264 -pix_fmt yuv422p -t 1 in422p.mp4
-    ffprobe -loglevel warning in422p.mp4  -show_streams -select_streams v | grep pix_fmt=yuv422p
+    ffprobe -loglevel warning in422p.mp4 -show_streams -select_streams v | grep pix_fmt=yuv422p
 	`
 	run(cmd)
 
