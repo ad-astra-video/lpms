@@ -21,7 +21,7 @@ func TestAPI_SkippedSegment(t *testing.T) {
 	// tests that also check things like SSIM, MD5 hashes, etc...
 	// See TestNvidia_API_MixedOutput / TestTranscoder_EncoderOpts / TestTranscoder_StreamCopy
 	run, dir := setupTest(t)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 	err := RTMPToHLS("../transcoder/test.ts", dir+"/out.m3u8", dir+"/out_%d.ts", "2", 0)
 	if err != nil {
 		t.Error(err)
@@ -489,7 +489,7 @@ func TestTranscoder_API_AlternatingTimestamps(t *testing.T) {
 // test short segments
 func shortSegments(t *testing.T, accel Acceleration, fc int) {
 	run, dir := setupTest(t)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 	fmt.Println(dir)
 	cmd := `
     # generate segments with #fc frames

@@ -1455,9 +1455,9 @@ nb_read_frames=%d
 
 func TestTranscoder_PassthroughFPS(t *testing.T) {
 	run, dir := setupTest(t)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 	fmt.Println(dir)
-	// Set  up test inputs and sanity check some things
+	// Set up test inputs and sanity check some things
 	cmd := `
         cp "$1/../transcoder/test.ts" test.ts
 
